@@ -13,7 +13,6 @@ class XLFile:
         self.tableTypeSymbols = ReadXLTable(wb, "_TypeSymbolTable")
         self.tableStatMultiplier = ReadXLTable(wb, "_StatMultiplierTable")
         self.tableBattleLeagues = ReadXLTable(wb, "_BattleLeagueTable")
-    pass
 
 def ReadXLTable(wb, strTable):
 
