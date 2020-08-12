@@ -63,5 +63,4 @@ mult = TypeEffectivenessMultiplier("Fire", pk, pkDefender)
 print("%s using %s has type effectiveness multiplier of %.2f against %s"
       % (pk.strName, "Flamethrower", mult, pkDefender.strName))
 
-breakpoint()  # so we can inspect variables in debugger before they go away!
 
