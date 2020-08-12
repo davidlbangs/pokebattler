@@ -80,4 +80,4 @@ def StrFromTuple(tuple: tuple, iProp):
     if tuple[iProp] is None: return ""
     return tuple[iProp]
 
-xlf = XLFile("C:/Users/david/Dropbox/David/Pokemon Go/Excel Calculator/Smart Battle Table.xlsm")
+xlf = XLFile("Smart Battle Table.xlsm")
