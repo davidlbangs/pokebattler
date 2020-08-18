@@ -20,9 +20,9 @@ def TypeOfQuickMove(strMove, strDefaultType = ""):
         return rowData[1]
 
 class QuickMove:
-    def __init__(self, strMove, strDefaultType=""):
+    def __init__(self, strMove):
         self.strMove = strMove
-        self.strType = strDefaultType
+        self.strType = ""
         self.cTurnsToQuick = 0
         self.tupleData = ()
         self.valDamage = 0
@@ -35,10 +35,7 @@ class QuickMove:
             self.tupleData = TupleFromTable(xlf.tableQuickMoves, strMove)
 
             if len(self.tupleData) == 0:
-                if SymbolForType(strMove) != "?":
-                    self.strType = strMove
-                else:
-                    self.strType = "Unknown"
+                self.strType = "Unknown"
             else:
                 self.strType = self.tupleData[1]
                 self.valDamage = self.tupleData[2]
@@ -50,30 +47,26 @@ class QuickMove:
     def RoundUpTurns(self, cTurns):
         return RoundUp(cTurns / self.cTurnsToQuick) * self.cTurnsToQuick
 
-def TypeOfChargeMove(strMove, strDefaultType = ""):
+def TypeOfChargeMove(strMove):
     # return the Type entry for a charge move in the charge move table.
     # Because of use in Excel Spreadsheet, return "" for ""
-    # If strMove is the name of a type, return that type.
     # As a last resort, return "Unknown"
 
     if strMove == "":
-        return strDefaultType
+        return ""
 
     tupleData = TupleFromTable(xlf.tableChargeMoves, strMove)
 
     if len(tupleData) == 0:
-        if SymbolForType(strMove) != "?":
-            return strMove  # if the move is the name of a type, just return it.
-
         return "Unknown"
     else:
         return tupleData[1]
 
 class ChargeMove:
-    def __init__(self, strMove, qm, strDefaultType=""):
+    def __init__(self, strMove, qm):
         self.tupleData = ()
         self.strMove = strMove
-        self.strType = strDefaultType
+        self.strType = ""
         self.valPower = 0
         self.valEnergy = 0
         self.valChanceOfBuff = 0
@@ -83,10 +76,7 @@ class ChargeMove:
             self.tupleData = TupleFromTable(xlf.tableChargeMoves, strMove)
 
             if len(self.tupleData) == 0:
-                if SymbolForType(strMove) != "?":
-                    self.strType = strMove
-                else:
-                    self.strType = "Unknown"
+                self.strType = "Unknown"
             else:
                 self.strType = self.tupleData[1]
                 self.valPower = self.tupleData[2]

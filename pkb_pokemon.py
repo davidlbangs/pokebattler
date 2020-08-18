@@ -104,33 +104,25 @@ class Pokemon:
         self.tupleData = TupleFromTable(xlf.tablePokemon, self.strNameData)
 
         if len(self.tupleData) == 0:
-            if SymbolForType(self.strNameData) != "?":
-                self.strType1 = self.strNameData
-            else:
-                self.strType1 = "Unknown"
+            self.fInvalid = True
+            self.fInvalidPokemon = True
         else:
             self.strType1 = self.tupleData[pkData_Type1]
             self.strType2 = self.tupleData[pkData_Type2]
 
-        self.qm = QuickMove(strQuickMove, self.strType1)
-        self.cm = ChargeMove(strChargeMove, self.qm, self.strType1)
+            self.qm = QuickMove(strQuickMove)
+
+            if len(self.qm.tupleData) == 0:
+                self.fInvalid = True
+                self.fInvalidQuickMove = True
+            else:
+                self.cm = ChargeMove(strChargeMove, self.qm)
+
+                if len(self.cm.tupleData) == 0:
+                    self.fInvalid = True
+                    self.fInvalidChargeMove = True
 
         self.ivs = IndividualValues(csvIvs)
-
-        if self.strType1 == "Unknown":
-            self.fInvalid = True
-            self.fInvalidPokemon = True
-        elif self.qm.strType == "Unknown":
-            self.fInvalid = True
-            self.fInvalidQuickMove = True
-        elif len(self.tupleData) == 0:
-            self.fTypeMuse = True
-        elif len(self.qm.tupleData) == 0:
-            self.fInvalid = True
-            self.fInvalidQuickMove = True
-        elif len(self.cm.tupleData) == 0:
-            self.fInvalid = True
-            self.fInvalidChargeMove = True
 
         strCategory = StrFromTuple(self.tupleData, pkData_Category)
         if strCategory == "M" or strCategory == "L":
