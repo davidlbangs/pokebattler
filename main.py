@@ -44,7 +44,7 @@ print("cpMax: %d" % bl.cpMax)
 print("restriction: %s" % bl.strRestriction)
 
 print("\nQualifyPokemon:")
-QualifyPokemon(pk, bl, False)
+QualifyPokemon(pk, bl)
 string = pk.strName + " is fighting in " + bl.strBattleLeague
 print(string)
 print("level: %.1f" % pk.bstat.level)

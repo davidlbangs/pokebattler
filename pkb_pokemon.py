@@ -73,7 +73,6 @@ class Pokemon:
         self.fMultipleChargeMoves = False
         self.fLegendaryOrMythical = False
         self.fShadow = False
-        self.fTypeMuse = False
 
         strQuickMove = ParseMoveName(csv, 0)
         if strQuickMove != "":  self.csv = self.csv + ", " + strQuickMove

@@ -58,24 +58,9 @@ class BattleLeague:
         self.cpMax = ValFromTuple(tupleData, 1)
         self.strRestriction = StrFromTuple(tupleData, 2)
 
-def QualifyPokemon(pk: Pokemon, bl: BattleLeague, fTypeMuseOK=False):
+def QualifyPokemon(pk: Pokemon, bl: BattleLeague):
 
     if pk.fInvalid:
-        return
-
-    if bl.cpMax == 0:
-        # Nothing to do to qualify for Type Effectiveness Battle.
-        pk.fTypeEffectivenessBattle = True
-        pk.fQualified = True
-        return
-
-    if pk.fTypeMuse:
-        # The pokemon is a Type Muse. How would our Pokemon do against a generic pokemon of a
-        # specific type with specific type moves?
-        # Generally, we allow type muses in the meta but not on our team.
-
-        pk.fQualified = fTypeMuseOK  # Team members can't be type prototypes, but meta muses can be
-        pk.fTypeEffectivenessBattle = True
         return
 
     pk.fQualified = True

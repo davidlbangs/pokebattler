@@ -3,7 +3,6 @@ from pkb_xldata import *
 def TypeOfQuickMove(strMove, strDefaultType = ""):
     # return the Type entry for a quick move in the charge move table.
     # Because of use in Excel Spreadsheet, return "" for ""
-    # If strMove is the name of a type, return that type.
     # As a last resort, return "Unknown"
 
     if strMove == "":
@@ -12,9 +11,6 @@ def TypeOfQuickMove(strMove, strDefaultType = ""):
     rowData = TupleFromTable(xlf.tableQuickMoves, strMove)
 
     if len(rowData) == 0:
-        if SymbolForType(strMove) != "?":
-            return strMove  # if the move is the name of a type, just return it.
-
         return "Unknown"
     else:
         return rowData[1]
