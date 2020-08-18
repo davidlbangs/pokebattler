@@ -118,12 +118,10 @@ Public Type Pokemon
     fInvalidChargeMove As Boolean
     fMultipleChargeMoves As Boolean
     fLegendaryOrMythical As Boolean
-    fTypeMuse As Boolean ' This pokemon is a type muse, who just represents a type , and has move types with no stats, for Type Effectiveness Battles.
     
     ' fields filled in by QualifyPokemon
     
     fQualified As Boolean ' Qualified for battle.
-    fTypeEffectivenessBattle As Boolean ' Qualified only for a Type Effectivness battle.
     ivs As IndividualValues
     bstat As BattleStats
     
@@ -142,56 +140,6 @@ Public Type Pokemon
             and stats reflect buffs in battle. For real initial stats of real moves, see above.
 
 End Type
-
-Sub InitQuickMove(qm As QuickMove, strQuickMove As String, Optional strDefaultType As String = "")
-    Dim qmInit As QuickMove
-    
-    qm = qmInit ' clear data
-    qm.strMove = strQuickMove
-    
-    If qm.strMove = "" Then
-        qm.strType = strDefaultType
-    Else
-        Set qm.rngData = GetQuickMoveData(qm.strMove)
-    
-        If qm.rngData Is Nothing Then
-            If SymbolForType(qm.strMove) <> "?" Then
-                qm.strType = qm.strMove  ' Attack name IS a type, like Fighting.  Just return it so people can use pseudo-attacks
-            Else
-                qm.strType = "Unknown"
-            End If
-        Else
-            qm.strType = qm.rngData.Cells(1, 2).value
-            qm.cTurnsToQuick = GetDataValue(qm.rngData, 5)
-        End If
-    End If
-
-End Sub
-
-Sub InitChargeMove(cm As ChargeMove, qm As QuickMove, strChargeMove As String, Optional strDefaultType As String = "")
-    Dim cmInit As ChargeMove
-    
-    cm = cmInit ' clear data
-    cm.strMove = strChargeMove
-    
-    If cm.strMove = "" Then
-        cm.strType = strDefaultType
-    Else
-        Set cm.rngData = GetChargeMoveData(cm.strMove)
-    
-        If cm.rngData Is Nothing Then
-            If SymbolForType(cm.strMove) <> "?" Then
-                cm.strType = cm.strMove  ' Attack name IS a type, like Fighting.  Just return it so people can use pseudo-attacks
-            Else
-                cm.strType = "Unknown"
-            End If
-        Else
-            cm.strType = cm.rngData.Cells(1, 2).value
-            cm.cTurnsToCharge = CTurnsToChargeMove(cm, qm)
-        End If
-    End If
-
-End Sub
 
 Function GetQuickMoveData(strQuickMove As String) As Range
     Dim rngTable As Range
@@ -417,7 +365,7 @@ Function GetSpecialEffectSymbols(cm As ChargeMove) As String
     Dim rngTable As Range
     
     If cm.rngData Is Nothing Then
-        GetSpecialEffectSymbols = ""
+        GetSpecialEffectSymbols = "?"
     Else
         GetSpecialEffectSymbols = cm.rngData.Cells(1, 11)
     End If
@@ -473,13 +421,13 @@ NoAbbreviation:
     ChargeMoveAbbreviation = strMove
 End Function
 
-Function TypeOfQuickMove(strMove As String, Optional strDefaultType As String = "") As String
+Function TypeOfQuickMove(strMove As String) As String
 ' Return "" if no attack, a string describing the attack type, or "Unknown" if an attack not in the table.
 
     Dim rngTable As Range
     
     If strMove = "" Then
-        TypeOfQuickMove = strDefaultType
+        TypeOfQuickMove = ""
         Exit Function
     End If
     
@@ -493,21 +441,17 @@ Function TypeOfQuickMove(strMove As String, Optional strDefaultType As String = 
     Exit Function
     
 NoMoveType:
-    If SymbolForType(strMove) <> "?" Then
-        TypeOfQuickMove = strMove  ' Attack name IS a type, like Fighting.  Just return it so people can use pseudo-attacks
-    Else
-        TypeOfQuickMove = "Unknown"
-    End If
+    TypeOfQuickMove = "Unknown"
 
 End Function
 
-Function TypeOfChargeMove(strMove As String, Optional strDefaultType As String = "") As String
+Function TypeOfChargeMove(strMove As String) As String
 ' Return "" if no attack, a string describing the attack type, or "Unknown" if an attack not in the table.
 
     Dim rngTable As Range
     
     If strMove = "" Then
-        TypeOfChargeMove = strDefaultType
+        TypeOfChargeMove = ""
         Exit Function
     End If
     
@@ -521,11 +465,7 @@ Function TypeOfChargeMove(strMove As String, Optional strDefaultType As String =
     Exit Function
     
 NoMoveType:
-    If SymbolForType(strMove) <> "?" Then
-        TypeOfChargeMove = strMove  ' Attack name IS a type, like Fighting.  Just return it so people can use pseudo-attacks
-    Else
-        TypeOfChargeMove = "Unknown"
-    End If
+    TypeOfChargeMove = "Unknown"
 
 End Function
 
@@ -600,9 +540,6 @@ Function SpecialEffectsForMoveset(csv As String) As String
     If strError <> "" Then
         SpecialEffectsForMoveset = strError
         Exit Function
-    ElseIf pk.fTypeMuse Then
-        SpecialEffectsForMoveset = "Type Muse"
-        Exit Function
     End If
 
 ' Now the special effects symbol.
@@ -632,4 +569,181 @@ Function SpecialEffectsForMoveset(csv As String) As String
     SpecialEffectsForMoveset = strSymbols
 
 End Function
+
+Sub InitQuickMove(qm As QuickMove, strQuickMove As String)
+    Dim qmInit As QuickMove
+    
+    qm = qmInit ' clear data
+    qm.strMove = strQuickMove
+    
+    If qm.strMove = "" Then
+        qm.strType = ""
+    Else
+        Set qm.rngData = GetQuickMoveData(qm.strMove)
+    
+        If qm.rngData Is Nothing Then
+            qm.strType = "Unknown"
+        Else
+            qm.strType = qm.rngData.Cells(1, 2).value
+            qm.cTurnsToQuick = GetDataValue(qm.rngData, 5)
+        End If
+    End If
+
+End Sub
+
+Sub InitChargeMove(cm As ChargeMove, qm As QuickMove, strChargeMove As String)
+    Dim cmInit As ChargeMove
+    
+    cm = cmInit ' clear data
+    cm.strMove = strChargeMove
+    
+    If cm.strMove = "" Then
+        cm.strType = ""
+    Else
+        Set cm.rngData = GetChargeMoveData(cm.strMove)
+    
+        If cm.rngData Is Nothing Then
+            cm.strType = "Unknown"
+        Else
+            cm.strType = cm.rngData.Cells(1, 2).value
+            cm.cTurnsToCharge = CTurnsToChargeMove(cm, qm)
+        End If
+    End If
+
+End Sub
+
+Sub InitPokemon(ByRef pk As Pokemon, csv As String)
+    Dim pkInit As Pokemon
+    Dim iNextMove As Integer, strNextMove As String, strQuickMove As String, strChargeMove As String
+    Dim strCategory As String
+    Dim strType As String
+
+    
+    pk = pkInit ' empty
+    
+    pk.strName = ParsePokemonName(csv)
+    pk.csv = pk.strName  ' we will rebuild this to beautify and standardize
+    
+    strQuickMove = ParseMoveName(csv, 1)
+    If strQuickMove <> "" Then pk.csv = pk.csv & ", " & strQuickMove
+    
+    strChargeMove = ParseMoveName(csv, 2)
+    If strChargeMove <> "" Then pk.csv = pk.csv & ", " & strChargeMove
+    
+    iNextMove = 3
+    strNextMove = ParseMoveName(csv, iNextMove)
+    
+    While strNextMove <> ""
+        strType = TypeOfChargeMove(strNextMove)
+        If strType = "Unknown" Then
+            pk.fInvalid = True
+            pk.fInvalidChargeMove = True
+        End If
+        pk.fMultipleChargeMoves = True
+        
+        pk.csv = pk.csv & ", " & strNextMove
+        iNextMove = iNextMove + 1
+        strNextMove = ParseMoveName(csv, iNextMove)
+    Wend
+    
+    ' pk.csv is now a normalized version of csv, with consistent spacing and capitalization.
+
+    pk.strNameData = pk.strName
+
+    If InStr(pk.strName, "(shadow") > 0 Then
+        pk.strNameData = Trim(Replace(pk.strName, "(shadow)", ""))
+        pk.fShadow = True
+    End If
+    
+    Set pk.rngData = GetPokemonData(pk.strNameData)
+    
+    If pk.rngData Is Nothing Then
+        pk.fInvalid = True
+        pk.fInvalidPokemon = True
+    Else
+        pk.strType1 = pk.rngData.Cells(1, pkData_Type1)
+        pk.strType2 = pk.rngData.Cells(1, pkData_Type2)
+        
+        Call InitQuickMove(pk.qm, strQuickMove)
+        
+        If pk.qm.rngData Is Nothing Then
+            pk.fInvalid = True
+            pk.fInvalidQuickMove = True
+        Else
+            Call InitChargeMove(pk.cm, pk.qm, strChargeMove)
+    
+            If pk.cm.rngData Is Nothing Then
+                pk.fInvalid = True
+                pk.fInvalidChargeMove = True
+            End If
+        End If
+    End If
+
+    strCategory = GetPkString(pk, pkData_Category)
+    If strCategory = "M" Or strCategory = "L" Then pk.fLegendaryOrMythical = True
+    
+End Sub
+
+Function StrValidatePk(pk As Pokemon) As String
+    StrValidatePk = ""
+    If pk.fInvalid Then
+        If pk.fInvalidPokemon Then
+            StrValidatePk = "Not A Pokemon"
+        Else
+            If pk.qm.strMove = "" Then
+                StrValidatePk = "Missing Quick Move"
+            ElseIf pk.fInvalidQuickMove Then
+                StrValidatePk = "Bad Quick Move"
+            ElseIf pk.cm.strMove = "" Then
+                StrValidatePk = "Missing Charge Move"
+            ElseIf pk.fInvalidChargeMove Then
+                StrValidatePk = "Bad Charge Move"
+            End If
+        End If
+    End If
+End Function
+
+' Qualify a Pokemon for battle.
+
+Sub QualifyPokemon(pk As Pokemon, csvIV As String, ByVal rngDataBattleLeague As Range, fTypeMuseOK As Boolean)
+    Dim cpMaxBattleLeague As Integer
+
+    If pk.fInvalid Then Exit Sub
+    
+    cpMaxBattleLeague = GetDataInteger(rngDataBattleLeague, blData_MaxCp)
+    
+    ' let's use 13, 13, 13 as our default ivs
+    pk.ivs.Attack = 13: pk.ivs.Defense = 13: pk.ivs.Stamina = 13: pk.ivs.levelMax = 40
+
+    If csvIV <> "" Then
+        Dim str1 As String, str2 As String, str3 As String, str4 As String
+        
+        Call Parse4Substrings(csvIV, ",", str1, str2, str3, str4)
+        If IsNumeric(str1) Then pk.ivs.Attack = MinMaxI(CInt(str1), 1, 15)
+        If IsNumeric(str2) Then pk.ivs.Defense = MinMaxI(CInt(str2), 1, 15)
+        If IsNumeric(str3) Then pk.ivs.Stamina = MinMaxI(CInt(str3), 1, 15)
+        If IsNumeric(str4) Then pk.ivs.levelMax = MinMax(CDec(str4), 1, 41)
+        pk.ivs.csvIV = csvIV
+    End If
+    
+    
+    pk.fQualified = True
+    
+    ' Qualified unless the League has restrictions.
+    
+    Select Case GetDataString(rngDataBattleLeague, blData_Restriction)
+    
+    Case "Premier"
+        If pk.fLegendaryOrMythical Then pk.fQualified = False
+        
+    Case "Flying"
+        If pk.strType1 <> "Flying" And pk.strType2 <> "Flying" Then pk.fQualified = False
+    
+    End Select
+    
+    Call CalcPokemonStats(pk, cpMaxBattleLeague)
+
+End Sub
+
+
 

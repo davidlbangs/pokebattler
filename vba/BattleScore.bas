@@ -54,12 +54,9 @@ Function BattleScoreCore(ByRef pk1 As Pokemon, ByRef pk2 As Pokemon) As Integer
 '
 ' Again, this has been tuned for the purposes of helping a player decide in real time which pokemon to bring in against each oponent, and which
 ' charge moves to launch.
-'
-' Battles are either based on TypeEffectiveness or BattleLeague. BattleLeague is used way more, but early support for TypeEffectiveness calculations
-' which ignore pokemon and move stats was retained because it may be useful to battle a pokemon against a "Type Muse", so that types may be present
-' in the battle table as a stand-in for when the oposing pokemon is not in the table but is of known type.
 
-Dim breakPoint As Integer
+
+    Dim cTurnsMaxBattle As Single
 
     BattleScoreCore = -1 'error
     
@@ -67,93 +64,58 @@ Dim breakPoint As Integer
     
     If Not (pk1.fQualified And pk2.fQualified) Then Exit Function
         
-    If pk1.fTypeEffectivenessBattle Or pk2.fTypeEffectivenessBattle Then
-        'Type Effectivness Battle
-        
-        'Calculations based ONLY on Type Effectiveness Only.
-        
-        Dim damageByPk1 As Single, damageByPk2 As Single
-        
-        pk1.qm.factorMult = TypeEffectivenessMultiplier(pk1.qm.strType, pk1, pk2)
-        pk2.qm.factorMult = TypeEffectivenessMultiplier(pk2.qm.strType, pk2, pk1)
-        
-        pk1.cm.factorMult = TypeEffectivenessMultiplier(pk1.cm.strType, pk1, pk2)
-        pk2.cm.factorMult = TypeEffectivenessMultiplier(pk2.cm.strType, pk2, pk1)
 
-        ' These functions will switch out the charge move IF the pokemon has multiple charge moves and there is a more effective move
-        ' in the list.
-        
-        Call DetermineBestChargeMoveByType(pk1, pk2)
-        Call DetermineBestChargeMoveByType(pk2, pk1)
-        
-        pk1.cm.strMove = "[" & pk1.cm.strType & "]" 'ByRef
-        pk2.cm.strMove = "[" & pk2.cm.strType & "]" 'ByRef
     
-        ' considering only type effectiveness and stab, assuming quick and charge moves have equal damage potential.
-        damageByPk1 = pk1.qm.factorMult + pk1.cm.factorMult
-        damageByPk2 = pk2.qm.factorMult + pk2.cm.factorMult
+    Call CalcQuickMoveStats(pk1, pk2)
+    Call CalcQuickMoveStats(pk2, pk1)
+    
+    ' number of turns in battle if only quick moves were used
+    cTurnsMaxBattle = Min(pk1.qm.cTurnsToVictory, pk2.qm.cTurnsToVictory)
         
-        BattleScoreCore = 1000 * (damageByPk1 / (damageByPk1 + damageByPk2))
-    Else
-        Dim cTurnsMaxBattle As Single
-        
-        'League Battle
-        
-        Call CalcQuickMoveStats(pk1, pk2)
-        Call CalcQuickMoveStats(pk2, pk1)
-        
-        ' number of turns in battle if only quick moves were used
-        cTurnsMaxBattle = Min(pk1.qm.cTurnsToVictory, pk2.qm.cTurnsToVictory)
-            
-        ' consider best charge move using detailed pokemon and battle knowledge.
-        
-        Call CalcChargeMoveStats(pk1.cm, pk1, pk2, cTurnsMaxBattle)
-        Call CalcChargeMoveStats(pk2.cm, pk2, pk1, cTurnsMaxBattle)
+    ' consider best charge move using detailed pokemon and battle knowledge.
+    
+    Call CalcChargeMoveStats(pk1.cm, pk1, pk2, cTurnsMaxBattle)
+    Call CalcChargeMoveStats(pk2.cm, pk2, pk1, cTurnsMaxBattle)
 
-        Call DetermineBestChargeMoves(pk1, pk2, cTurnsMaxBattle)
-        Call DetermineBestChargeMoves(pk2, pk1, cTurnsMaxBattle)
+    Call DetermineBestChargeMoves(pk1, pk2, cTurnsMaxBattle)
+    Call DetermineBestChargeMoves(pk2, pk1, cTurnsMaxBattle)
+    
+    If pk1.cmBestBuff.strMove <> pk1.cm.strMove Or IsStatAlteringChargeMove(pk1.cm) Or _
+        pk2.cmBestBuff.strMove <> pk2.cm.strMove Or IsStatAlteringChargeMove(pk2.cm) Then
         
-        If pk1.cmBestBuff.strMove <> pk1.cm.strMove Or IsStatAlteringChargeMove(pk1.cm) Or _
-            pk2.cmBestBuff.strMove <> pk2.cm.strMove Or IsStatAlteringChargeMove(pk2.cm) Then
-            
-            Dim cTurnsInBattle As Single
-            
-            ' One or more stat altering moves are in play!  Let them do their work before calculating the final score.
-            ' Note that AdjustForBuff is actually very clever and may COMBINE the buff and charge move into a one/two punch.
-            
-            cTurnsInBattle = Min(pk1.cm.cTurnsToVictory, pk2.cm.cTurnsToVictory)
+        Dim cTurnsInBattle As Single
         
-            Call AdjustForBuff(pk1.cm, pk1.cmBestBuff, cTurnsMaxBattle, cTurnsInBattle, _
-                pk1.qm.dptQuick, pk1.cm.dptCharge, pk1.bstat.def, _
-                pk2.qm.dptQuick, pk2.cm.dptCharge, pk2.bstat.def)
+        ' One or more stat altering moves are in play!  Let them do their work before calculating the final score.
+        ' Note that AdjustForBuff is actually very clever and may COMBINE the buff and charge move into a one/two punch.
+        
+        cTurnsInBattle = Min(pk1.cm.cTurnsToVictory, pk2.cm.cTurnsToVictory)
+        
+        ' Apply opponent buff first so our own decision about whether to combine moves can take that into account.
+        Call AdjustForBuff(pk2, pk1, cTurnsMaxBattle, cTurnsInBattle)
+    
+        Call AdjustForBuff(pk1, pk2, cTurnsMaxBattle, cTurnsInBattle)
 
-            Call AdjustForBuff(pk2.cm, pk2.cmBestBuff, cTurnsMaxBattle, cTurnsInBattle, _
-                pk2.qm.dptQuick, pk2.cm.dptCharge, pk2.bstat.def, _
-                pk1.qm.dptQuick, pk1.cm.dptCharge, pk1.bstat.def)
-                
-            ' Requantize - So that each descrete move takes an integer number of hp points post buff.
-            pk1.qm.hpptQuick = HpPerTurnQm(pk1.qm, pk2.bstat.def)
-            pk1.cm.hpptCharge = HpPerTurnCm(pk1.cm, pk2.bstat.def)
-            pk2.qm.hpptQuick = HpPerTurnQm(pk2.qm, pk1.bstat.def)
-            pk2.cm.hpptCharge = HpPerTurnCm(pk2.cm, pk1.bstat.def)
-        End If
-        
+    End If
+    
+    If False Then ' This is tending to make all moves seem the same. Good moves are penalized more than bad ones to equalize them.
+    
         ' Limit cm.hpptCharge to reduce extreme wasted energy caused by overkill from distorting recommendations.
         Call TrimWastedDamage(pk1, pk2)
         Call TrimWastedDamage(pk2, pk1)
         
-        Call RewardFirstMoveAdvantage(pk1, pk2)
-        
-        ' Final calculations and score
-        
-        pk1.cm.cTurnsToVictory = RoundUpTurnsQm(pk2.bstat.hp / (pk1.qm.hpptQuick + pk1.cm.hpptCharge), pk1.qm)
-        pk2.cm.cTurnsToVictory = RoundUpTurnsQm(pk1.bstat.hp / (pk2.qm.hpptQuick + pk2.cm.hpptCharge), pk2.qm)
-        
-        'Score is a per-thousand ratio ratio of damage by attacker to combined damage. A score of 500 denotes a tie.
-        
-        BattleScoreCore = 1000 * (pk2.cm.cTurnsToVictory / (pk1.cm.cTurnsToVictory + pk2.cm.cTurnsToVictory))
-        
     End If
+    
+    Call RewardFirstMoveAdvantage(pk1, pk2)
+    
+    ' Final calculations and score
+    
+    pk1.cm.cTurnsToVictory = RoundUpTurnsQm(pk2.bstat.hp / (pk1.qm.hpptQuick + pk1.cm.hpptCharge), pk1.qm)
+    pk2.cm.cTurnsToVictory = RoundUpTurnsQm(pk1.bstat.hp / (pk2.qm.hpptQuick + pk2.cm.hpptCharge), pk2.qm)
+    
+    'Score is a per-thousand ratio ratio of damage by attacker to combined damage. A score of 500 denotes a tie.
+    
+    BattleScoreCore = 1000 * (pk2.cm.cTurnsToVictory / (pk1.cm.cTurnsToVictory + pk2.cm.cTurnsToVictory))
+        
     
 End Function
 
@@ -235,225 +197,16 @@ Sub DetermineBestChargeMoves(pk As Pokemon, pkDefender As Pokemon, ByVal cTurnsM
     
 End Sub
 
-Sub DetermineBestChargeMoveByType(pk As Pokemon, pkDefender As Pokemon)
 
-    If pk.fMultipleChargeMoves Then
-   
-        Dim cmNext As ChargeMove, strNext As String, iNext As Integer
-        
-        iNext = 3
-        cmNext.strMove = ParseMoveName(pk.csv, iNext)
-            
-        While cmNext.strMove <> ""
-            cmNext.strType = TypeOfChargeMove(cmNext.strMove, pk.strType1)
-            cmNext.factorMult = TypeEffectivenessMultiplier(cmNext.strType, pk, pkDefender)
-
-            If cmNext.factorMult > pk.cm.factorMult Then
-                pk.cm = cmNext
-            End If
-            
-            iNext = iNext + 1
-            cmNext.strMove = ParseMoveName(pk.csv, iNext)
-        Wend
-        
-    End If
-    
-    pk.cmBest = pk.cm
-    pk.cmBestBuff = pk.cm
-    pk.cmStrongest = pk.cm
-    pk.cmQuickest = pk.cm
-
-End Sub
-
-Function TypeEffectivenessMultiplier(strMoveType As String, pk As Pokemon, pkDefender As Pokemon) As Single
-    Dim effectiveness As Integer
-    Dim mult As Single
-    
-    ' These scores are the attack strength multipliers used by Pokemon Go.
-    ' The highest would be 3.072, if the move is doubly effective against the defender and has 20% STAB.
-
-    effectiveness = TypeEffectiveness(strMoveType, pkDefender.strType1) + TypeEffectiveness(strMoveType, pkDefender.strType2)
-    
-    mult = 1.6 ^ effectiveness
-    ' Extreme case is Tropius, where value ranges from 0.244 to 2.56
-    
-    If strMoveType = pk.strType1 Or strMoveType = pk.strType2 Then
-        mult = mult * 1.2   ' add stab
-    End If
-    
-    ' Including stab, maximum possible value is 3.072
-    
-    TypeEffectivenessMultiplier = mult
-
-End Function
-
-Function TypeEffectiveness(strTypeAttack As String, strTypeDefend As String) As Integer
-
-    'TypeEffectiveness returns +1, 0, -1, or -2 in all cases.
-    '+1 signifies super effective. 0 signifies neutral.  -1 not very effective.  -2 doubly ineffective.
-    'Add the TypeEffectiveness against the defender's primary and secondary types.
-
-    TypeEffectiveness = 0
-    
-    If strTypeAttack = "" Or strTypeAttack = "Unknown" Or strTypeDefend = "" Or strTypeDefend = "Unknown" Then Exit Function
-    
-    Select Case strTypeAttack
-    
-    Case "Bug"
-        Select Case strTypeDefend
-        Case "Dark", "Grass", "Psychic"
-            TypeEffectiveness = 1
-        Case "Fairy", "Fighting", "Fire", "Flying", "Ghost", "Poison", "Steel"
-            TypeEffectiveness = -1
-        End Select
-    
-    Case "Dark"
-        Select Case strTypeDefend
-        Case "Ghost", "Psychic"
-            TypeEffectiveness = 1
-        Case "Dark", "Fairy", "Fighting"
-            TypeEffectiveness = -1
-        End Select
-    
-    Case "Dragon"
-        Select Case strTypeDefend
-        Case "Dragon"
-            TypeEffectiveness = 1
-        Case "Steel"
-            TypeEffectiveness = -1
-        Case "Fairy"
-            TypeEffectiveness = -2
-        End Select
-    
-    Case "Electric"
-        Select Case strTypeDefend
-        Case "Flying", "Water"
-            TypeEffectiveness = 1
-        Case "Dragon", "Electric", "Grass"
-            TypeEffectiveness = -1
-        Case "Ground"
-            TypeEffectiveness = -2
-        End Select
-    Case "Fairy"
-        Select Case strTypeDefend
-        Case "Dark", "Dragon", "Fighting"
-            TypeEffectiveness = 1
-        Case "Fire", "Poison", "Steel"
-            TypeEffectiveness = -1
-        End Select
-    Case "Fighting"
-        Select Case strTypeDefend
-        Case "Dark", "Ice", "Normal", "Rock", "Steel"
-            TypeEffectiveness = 1
-        Case "Bug", "Fairy", "Flying", "Poison", "Psychic"
-            TypeEffectiveness = -1
-        Case "Ghost"
-            TypeEffectiveness = -2
-        End Select
-    Case "Fire"
-        Select Case strTypeDefend
-        Case "Bug", "Grass", "Ice", "Steel"
-            TypeEffectiveness = 1
-        Case "Dragon", "Fire", "Rock", "Water"
-            TypeEffectiveness = -1
-        End Select
-    Case "Flying"
-        Select Case strTypeDefend
-        Case "Bug", "Fighting", "Grass"
-            TypeEffectiveness = 1
-        Case "Electric", "Rock", "Steel"
-            TypeEffectiveness = -1
-        End Select
-    Case "Ghost"
-        Select Case strTypeDefend
-        Case "Ghost", "Psychic"
-            TypeEffectiveness = 1
-        Case "Dark"
-            TypeEffectiveness = -1
-        Case "Normal"
-            TypeEffectiveness = -2
-        End Select
-    Case "Grass"
-        Select Case strTypeDefend
-        Case "Ground", "Rock", "Water"
-            TypeEffectiveness = 1
-        Case "Bug", "Dragon", "Fire", "Flying", "Grass", "Poison", "Steel"
-            TypeEffectiveness = -1
-        End Select
-    Case "Ground"
-        Select Case strTypeDefend
-        Case "Electric", "Fire", "Poison", "Rock", "Steel"
-            TypeEffectiveness = 1
-        Case "Bug", "Grass"
-            TypeEffectiveness = -1
-        Case "Flying"
-            TypeEffectiveness = -2
-        End Select
-    Case "Ice"
-        Select Case strTypeDefend
-        Case "Dragon", "Flying", "Grass", "Ground"
-            TypeEffectiveness = 1
-        Case "Fire", "Ice", "Steel", "Water"
-            TypeEffectiveness = -1
-        End Select
-    Case "Normal"
-        Select Case strTypeDefend
-        Case "Rock", "Steel"
-            TypeEffectiveness = -1
-        Case "Ghost"
-            TypeEffectiveness = -2
-        End Select
-    Case "Poison"
-        Select Case strTypeDefend
-        Case "Fairy", "Grass"
-            TypeEffectiveness = 1
-        Case "Ghost", "Ground", "Poison", "Rock"
-            TypeEffectiveness = -1
-        Case "Steel"
-            TypeEffectiveness = -2
-        End Select
-    Case "Psychic"
-        Select Case strTypeDefend
-        Case "Fighting", "Poison"
-            TypeEffectiveness = 1
-        Case "Psychic", "Steel"
-            TypeEffectiveness = -1
-        Case "Dark"
-            TypeEffectiveness = -2
-        End Select
-    Case "Rock"
-        Select Case strTypeDefend
-        Case "Bug", "Fire", "Flying", "Ice"
-            TypeEffectiveness = 1
-        Case "Fighting", "Ground", "Steel"
-            TypeEffectiveness = -1
-        End Select
-    Case "Steel"
-        Select Case strTypeDefend
-        Case "Fairy", "Ice", "Rock"
-            TypeEffectiveness = 1
-        Case "Electric", "Fire", "Steel", "Water"
-            TypeEffectiveness = -1
-        End Select
-    Case "Water"
-        Select Case strTypeDefend
-        Case "Fire", "Ground", "Rock"
-            TypeEffectiveness = 1
-        Case "Dragon", "Grass", "Water"
-            TypeEffectiveness = -1
-        End Select
-    End Select
-
-End Function
-
-Sub AdjustForBuff(cm As ChargeMove, cmBuff As ChargeMove, _
-ByVal cTurnsMaxBattle As Single, ByVal cTurnsInBattle As Single, _
-ByRef dptAttackerQuick As Single, ByRef dptAttackerCharge As Single, ByRef defAttacker As Single, _
-ByRef dptDefenderQuick As Single, ByRef dptDefenderCharge As Single, ByRef defDefender As Single)
+Sub AdjustForBuff(pk As Pokemon, pkDefender As Pokemon, ByVal cTurnsMaxBattle As Single, ByVal cTurnsInBattle As Single)
 
     Dim valChanceOfBuff As Single, valChanceOfBuff_BuffMove As Single
     Dim cStagesAttackerAttack As Single, cStagesAttackerDefense As Single, cStagesDefenderAttack As Single, cStagesDefenderDefense As Single
     Dim buffAttackerAttack As Single, buffAttackerDefense As Single, buffDefenderAttack As Single, buffDefenderDefense As Single
+    Dim cm As ChargeMove, cmBuff As ChargeMove
+    
+    cm = pk.cm
+    cmBuff = pk.cmBestBuff
     
     With cm.rngData
     
@@ -461,14 +214,14 @@ ByRef dptDefenderQuick As Single, ByRef dptDefenderCharge As Single, ByRef defDe
     
     If valChanceOfBuff > 0 Or cmBuff.strMove <> cm.strMove Then
         Dim cTurnsAfterBuff As Single
-        Dim score As Single, scoreAlt As Single
+        Dim score As Integer, scoreAlt As Integer
         
         cStagesAttackerAttack = .Cells(1, 7) * valChanceOfBuff
         cStagesDefenderAttack = .Cells(1, 8) * valChanceOfBuff
         cStagesAttackerDefense = .Cells(1, 9) * valChanceOfBuff
         cStagesDefenderDefense = .Cells(1, 10) * valChanceOfBuff
         
-        cm.strBuffSymbols = GetSpecialEffectSymbols(cm)
+        pk.cm.strBuffSymbols = GetSpecialEffectSymbols(cm)
     
         'we have work to do!  A kind of turn by turn battle simulation is needed to understand buff effects.
         'values passed in to this subroutine ByRef will be adjusted proportiately to reflect nerfs happening during the battle.
@@ -501,8 +254,7 @@ ByRef dptDefenderQuick As Single, ByRef dptDefenderCharge As Single, ByRef defDe
                 If (cmBuff.cTurnsToCharge + cm.cTurnsToCharge < cTurnsInBattle) Then ' There is time to simulate a buff move.
                 
                     Dim cStagesAttackerAttackBuff As Single, cStagesAttackerDefenseBuff As Single, cStagesDefenderAttackBuff As Single, cStagesDefenderDefenseBuff As Single
-                    Dim dptAttackerQuick1 As Single, dptAttackerCharge1 As Single, defAttacker1 As Single
-                    Dim dptDefenderQuick1 As Single, dptDefenderCharge1 As Single, defDefender1 As Single
+                    Dim pkAlt As Pokemon, pkDefAlt As Pokemon
 
                     cStagesAttackerAttackBuff = cmBuff.rngData.Cells(1, 7) * valChanceOfBuff_BuffMove
                     cStagesDefenderAttackBuff = cmBuff.rngData.Cells(1, 8) * valChanceOfBuff_BuffMove
@@ -515,22 +267,24 @@ ByRef dptDefenderQuick As Single, ByRef dptDefenderCharge As Single, ByRef defDe
                     'The rest of the stats get buffed by the buff move THEN by any buffs by the regular charge move
                     'applied proportionately as the battle progresses.
                     
-                    dptAttackerQuick1 = dptAttackerQuick: dptAttackerCharge1 = dptAttackerCharge: defAttacker1 = defAttacker
-                    dptDefenderQuick1 = dptDefenderQuick: dptDefenderCharge1 = dptDefenderCharge: defDefender1 = defDefender
+                    pkAlt = pk
+                    pkDefAlt = pkDefender
+                    
                     buffAttackerAttack = 1: buffAttackerDefense = 1: buffDefenderAttack = 1: buffDefenderDefense = 1
                     
                     ' we used to just call AdjustStatForBuff for each stat. This code is trying to avoid unecessary calls.
                      If cStagesAttackerAttack <> 0 Or cStagesAttackerAttackBuff <> 0 Then
                         'first, the buff move buffs the charge move once.
-                        dptAttackerCharge1 = dptAttackerCharge1 * BuffForStage(cStagesAttackerAttackBuff)
+                        pkAlt.cm.dptCharge = pkAlt.cm.dptCharge * BuffForStage(cStagesAttackerAttackBuff)
                         
                         'during the rest of the battle, the charge move may buff itself. Note we are using cTurnsAfterBuff and no buff move.
-                        Call AdjustStatForBuff(dptAttackerCharge1, cStagesAttackerAttack, cm.cTurnsToCharge, 0, 0, cTurnsAfterBuff, True)
+                        Call AdjustStatForBuff(pkAlt.cm.dptCharge, cStagesAttackerAttack, cm.cTurnsToCharge, 0, 0, cTurnsAfterBuff, True)
                         
                         ' quick attack adjustment is different in this case, since it is not being changed.
                         Call AdjustStatForBuff(buffAttackerAttack, cStagesAttackerAttack, cm.cTurnsToCharge, _
                             cStagesAttackerAttackBuff, cmBuff.cTurnsToCharge, cTurnsInBattle, True)
-                        dptAttackerQuick1 = dptAttackerQuick1 * buffAttackerAttack
+                            
+                        pkAlt.qm.dptQuick = pkAlt.qm.dptQuick * buffAttackerAttack
                     End If
                     
                     If cStagesAttackerDefense <> 0 Or cStagesAttackerDefenseBuff <> 0 Then
@@ -541,14 +295,14 @@ ByRef dptDefenderQuick As Single, ByRef dptDefenderCharge As Single, ByRef defDe
                                 cStagesAttackerDefenseBuff, cmBuff.cTurnsToCharge, cTurnsInBattle, True)
                         End If
                         
-                        defAttacker1 = defAttacker1 * buffAttackerDefense
+                        pkAlt.bstat.def = pkAlt.bstat.def * buffAttackerDefense
                     End If
                     
                     If cStagesDefenderAttack <> 0 Or cStagesDefenderAttackBuff Then
                         Call AdjustStatForBuff(buffDefenderAttack, cStagesDefenderAttack, cm.cTurnsToCharge, _
                             cStagesDefenderAttackBuff, cmBuff.cTurnsToCharge, cTurnsInBattle, False)
-                        dptDefenderQuick1 = dptDefenderQuick1 * buffDefenderAttack
-                        dptDefenderCharge1 = dptDefenderCharge1 * buffDefenderAttack
+                        pkDefAlt.qm.dptQuick = pkDefAlt.qm.dptQuick * buffDefenderAttack
+                        pkDefAlt.cm.dptCharge = pkDefAlt.cm.dptCharge * buffDefenderAttack
                     End If
                     
                     If cStagesDefenderDefense <> 0 Or cStagesDefenderDefenseBuff Then
@@ -559,23 +313,157 @@ ByRef dptDefenderQuick As Single, ByRef dptDefenderCharge As Single, ByRef defDe
                                 cStagesDefenderDefenseBuff, cmBuff.cTurnsToCharge, cTurnsInBattle, False)
                         End If
                         
-                        defDefender1 = defDefender1 * buffDefenderDefense
+                        pkDefAlt.bstat.def = pkDefAlt.bstat.def * buffDefenderDefense
                     End If
                     
-                    dptAttackerCharge1 = WeightedAverage(cmBuff.dptCharge, dptAttackerCharge1, cmBuff.cTurnsToCharge / cTurnsInBattle)
-                        
-                    'Did the nerf move improve the attacker's score?  If so, keep it.
-                    Dim damageByAttacker1 As Single, damageByDefender1 As Single
+                    pkAlt.cm.dptCharge = WeightedAverage(cmBuff.dptCharge, pkAlt.cm.dptCharge, cmBuff.cTurnsToCharge / cTurnsInBattle)
                     
-                    damageByAttacker1 = (dptAttackerQuick1 + dptAttackerCharge1) / defDefender1
-                    damageByDefender1 = (dptDefenderQuick1 + dptDefenderCharge1) / defAttacker1
-                    scoreAlt = 1000 * (damageByAttacker1 / (damageByAttacker1 + damageByDefender1))
+                    ' Requantize - So that each descrete move takes an integer number of hp points post buff.
+                    pkAlt.qm.hpptQuick = HpPerTurnQm(pkAlt.qm, pkDefAlt.bstat.def)
+                    pkAlt.cm.hpptCharge = HpPerTurnCm(pkAlt.cm, pkDefAlt.bstat.def)
+                    pkDefAlt.qm.hpptQuick = HpPerTurnQm(pkDefAlt.qm, pkAlt.bstat.def)
+                    pkDefAlt.cm.hpptCharge = HpPerTurnCm(pkDefAlt.cm, pkAlt.bstat.def)
+                    
+                    ' Alternate score.  Only use if better .
+                    
+                    pkAlt.cm.cTurnsToVictory = RoundUpTurnsQm(pkDefAlt.bstat.hp / (pkAlt.qm.hpptQuick + pkAlt.cm.hpptCharge), pkAlt.qm)
+                    pkDefAlt.cm.cTurnsToVictory = RoundUpTurnsQm(pkAlt.bstat.hp / (pkDefAlt.qm.hpptQuick + pkDefAlt.cm.hpptCharge), pkDefAlt.qm)
+                    scoreAlt = 1000 * (pkDefAlt.cm.cTurnsToVictory / (pkAlt.cm.cTurnsToVictory + pkDefAlt.cm.cTurnsToVictory))
+        
                 End If
             End If
 
         End If
         
         'Main case - just step through the battle modifying ByRef values based on charge move buffs.
+        
+        If valChanceOfBuff > 0 Then
+        
+            buffAttackerAttack = 1: buffAttackerDefense = 1: buffDefenderAttack = 1: buffDefenderDefense = 1
+            
+            ' we used to just call AdjustStatForBuff 6 times, one for each stat. This code is trying to avoid unecessary calls.
+            
+            If cStagesAttackerAttack <> 0 Then
+                Call AdjustStatForBuff(buffAttackerAttack, cStagesAttackerAttack, cm.cTurnsToCharge, _
+                    0, 0, cTurnsInBattle, True)
+                pk.qm.dptQuick = pk.qm.dptQuick * buffAttackerAttack
+                pk.cm.dptCharge = pk.cm.dptCharge * buffAttackerAttack
+            End If
+            
+            If cStagesAttackerDefense <> 0 Then
+                If cStagesAttackerDefense = cStagesAttackerAttack Then
+                    buffAttackerDefense = buffAttackerAttack
+                Else
+                    Call AdjustStatForBuff(buffAttackerDefense, cStagesAttackerDefense, cm.cTurnsToCharge, _
+                        0, 0, cTurnsInBattle, True)
+                End If
+                
+                pk.bstat.def = pk.bstat.def * buffAttackerDefense
+            End If
+            
+            If cStagesDefenderAttack <> 0 Then
+                Call AdjustStatForBuff(buffDefenderAttack, cStagesDefenderAttack, cm.cTurnsToCharge, _
+                    0, 0, cTurnsInBattle, False)
+                pkDefender.qm.dptQuick = pkDefender.qm.dptQuick * buffDefenderAttack
+                pkDefender.cm.dptCharge = pkDefender.cm.dptCharge * buffDefenderAttack
+            End If
+            
+            If cStagesDefenderDefense <> 0 Then
+                If cStagesDefenderDefense = cStagesDefenderAttack Then
+                    buffDefenderDefense = buffDefenderAttack
+                Else
+                    Call AdjustStatForBuff(buffDefenderDefense, cStagesDefenderDefense, cm.cTurnsToCharge, _
+                        0, 0, cTurnsInBattle, False)
+                End If
+                
+                pkDefender.bstat.def = pkDefender.bstat.def * buffDefenderDefense
+            End If
+            
+            ' Requantize - So that each descrete move takes an integer number of hp points post buff.
+            pk.qm.hpptQuick = HpPerTurnQm(pk.qm, pkDefender.bstat.def)
+            pk.cm.hpptCharge = HpPerTurnCm(pk.cm, pkDefender.bstat.def)
+            pkDefender.qm.hpptQuick = HpPerTurnQm(pkDefender.qm, pk.bstat.def)
+            pkDefender.cm.hpptCharge = HpPerTurnCm(pkDefender.cm, pk.bstat.def)
+            
+        End If
+        
+        If scoreAlt > 0 Then
+            'We have modelled an alternate scenario.
+            'If this would improve our score, use this scenario.
+                    
+            pk.cm.cTurnsToVictory = RoundUpTurnsQm(pkDefender.bstat.hp / (pk.qm.hpptQuick + pk.cm.hpptCharge), pk.qm)
+            pkDefender.cm.cTurnsToVictory = RoundUpTurnsQm(pk.bstat.hp / (pkDefender.qm.hpptQuick + pkDefender.cm.hpptCharge), pkDefender.qm)
+            score = 1000 * (pkDefender.cm.cTurnsToVictory / (pk.cm.cTurnsToVictory + pkDefender.cm.cTurnsToVictory))
+                        
+            If scoreAlt > score Then
+                'The nerf move was beneficial!  Keep it.
+                
+                pk = pkAlt
+                pkDefender = pkDefAlt
+                
+                pk.cm.strMove = ChargeMoveAbbreviation(cmBuff.strMove) & "+" & ChargeMoveAbbreviation(cm.strMove)
+                
+                If valChanceOfBuff_BuffMove > 0 Then
+                    pk.cm.strBuffSymbols = GetSpecialEffectSymbols(cmBuff)
+                    If valChanceOfBuff > 0 Then pk.cm.strBuffSymbols = pk.cm.strBuffSymbols & " + " & GetSpecialEffectSymbols(cm)
+                End If
+            End If
+        End If
+    End If
+    
+    End With
+    
+End Sub
+
+Function BuffFactor(cm As ChargeMove, cmDefender As ChargeMove, ByVal cTurnsMaxBattle As Single) As Single
+    Dim cTurnsInBattle As Single
+    Dim dptAttackerQuick As Single, dptAttackerCharge As Single, defAttacker As Single
+    Dim dptDefenderQuick As Single, dptDefenderCharge As Single, defDefender As Single
+    Dim breakPoint As Integer
+    
+    BuffFactor = 1 ' Default answer indicating no time factor impact, or no battle details available.
+    
+    If cTurnsMaxBattle > 0 And IsStatAlteringChargeMove(cm) Then
+        dptAttackerQuick = 1: dptAttackerCharge = 1: defAttacker = 1
+        dptDefenderQuick = 1: dptDefenderCharge = 1: defDefender = 1
+        
+        cTurnsInBattle = Min(cm.cTurnsToVictory, cmDefender.cTurnsToVictory)
+
+        Call AdjustForBuffForFactor(cm, cTurnsMaxBattle, cTurnsInBattle, _
+            dptAttackerQuick, dptAttackerCharge, defAttacker, dptDefenderQuick, dptDefenderCharge, defDefender)
+                        
+        BuffFactor = ((dptAttackerQuick + dptAttackerCharge) * defAttacker) / ((dptDefenderQuick + dptDefenderCharge) * defDefender)
+    End If
+
+End Function
+
+Sub AdjustForBuffForFactor(cm As ChargeMove, _
+ByVal cTurnsMaxBattle As Single, ByVal cTurnsInBattle As Single, _
+ByRef dptAttackerQuick As Single, ByRef dptAttackerCharge As Single, ByRef defAttacker As Single, _
+ByRef dptDefenderQuick As Single, ByRef dptDefenderCharge As Single, ByRef defDefender As Single)
+
+    'simplified version of AdjustForBuff used in BuffFactor.  It was just to hard to maintain the main without breaking
+    'BuffFactor's very different needs.
+
+    Dim valChanceOfBuff As Single
+    Dim cStagesAttackerAttack As Single, cStagesAttackerDefense As Single, cStagesDefenderAttack As Single, cStagesDefenderDefense As Single
+    Dim buffAttackerAttack As Single, buffAttackerDefense As Single, buffDefenderAttack As Single, buffDefenderDefense As Single
+    
+    With cm.rngData
+    
+    valChanceOfBuff = .Cells(1, 6).value  'Percentage chance firing the charge move will cause a buff.
+    
+    If valChanceOfBuff > 0 Then
+        Dim cTurnsAfterBuff As Single
+        Dim score As Single, scoreAlt As Single
+        
+        cStagesAttackerAttack = .Cells(1, 7) * valChanceOfBuff
+        cStagesDefenderAttack = .Cells(1, 8) * valChanceOfBuff
+        cStagesAttackerDefense = .Cells(1, 9) * valChanceOfBuff
+        cStagesDefenderDefense = .Cells(1, 10) * valChanceOfBuff
+    
+        'we have work to do!  A kind of turn by turn battle simulation is needed to understand buff effects.
+        'values passed in to this subroutine ByRef will be adjusted proportiately to reflect nerfs happening during the battle.
         
         If valChanceOfBuff > 0 Then
         
@@ -617,31 +505,6 @@ ByRef dptDefenderQuick As Single, ByRef dptDefenderCharge As Single, ByRef defDe
                 End If
                 
                 defDefender = defDefender * buffDefenderDefense
-            End If
-        End If
-        
-        If scoreAlt > 0 Then
-            'We have modelled an alternate scenario.
-            'If this would improve our score, use this scenario.
-            
-            Dim damageByAttacker As Single, damageByDefender As Single
-            
-            damageByAttacker = (dptAttackerQuick + dptAttackerCharge) / defDefender
-            damageByDefender = (dptDefenderQuick + dptDefenderCharge) / defAttacker
-            score = 1000 * (damageByAttacker / (damageByAttacker + damageByDefender))
-                        
-            If scoreAlt > score Then
-                'The nerf move was beneficial!  Keep it.
-                
-                dptAttackerQuick = dptAttackerQuick1: dptAttackerCharge = dptAttackerCharge1: defAttacker = defAttacker1
-                dptDefenderQuick = dptDefenderQuick1: dptDefenderCharge = dptDefenderCharge1: defDefender = defDefender1
-                
-                cm.strMove = ChargeMoveAbbreviation(cmBuff.strMove) & "+" & ChargeMoveAbbreviation(cm.strMove)
-                
-                If valChanceOfBuff_BuffMove > 0 Then
-                    cm.strBuffSymbols = GetSpecialEffectSymbols(cmBuff)
-                    If valChanceOfBuff > 0 Then cm.strBuffSymbols = cm.strBuffSymbols & " + " & GetSpecialEffectSymbols(cm)
-                End If
             End If
         End If
     End If
@@ -723,7 +586,6 @@ Sub AdjustStatForBuff(ByRef stat As Single, _
     End If
 
 End Sub
-
 
 Function BuffForStage(valStage As Single) As Single
 
@@ -831,46 +693,6 @@ BonusForPk2:
     End If
         
 End Sub
-
-Sub CalcQuickMoveStats(pk As Pokemon, pkDefender As Pokemon)
-    With pk.qm
-        .factorMult = TypeEffectivenessMultiplier(.strType, pk, pkDefender)
-        
-        ' https://gamepress.gg/pokemongo/damage-mechanics
-        ' https://www.reddit.com/r/TheSilphRoad/comments/i2mvde/calculating_damage_done_by_an_attack_in_pogo/
-        
-        .dmgQuick = GetDmgQuickMove(pk.qm) * .factorMult * pk.bstat.att * factor_PVP
-        .hpPerQuick = RoundDown(.dmgQuick / pkDefender.bstat.def) + 1 ' Initial, pre-buff hp taken per quick move.
-        
-        .dptQuick = .dmgQuick / .cTurnsToQuick
-        .hpptQuick = CSng(.hpPerQuick) / CSng(.cTurnsToQuick) ' ensure floating point math.
-        .dptQuickInit = .dptQuick
-        .cTurnsToVictory = CTurnsToVictoryQm(pk.qm, pkDefender.bstat.hp, pkDefender.bstat.def)
-    End With
-End Sub
-
-Sub CalcChargeMoveStats(cm As ChargeMove, pk As Pokemon, pkDefender As Pokemon, cTurnsMaxBattle As Single)
-
-    With cm
-        .factorMult = TypeEffectivenessMultiplier(.strType, pk, pkDefender)
-        .factorTime = TimeFactor(cm, cTurnsMaxBattle)
-        
-        ' https://gamepress.gg/pokemongo/damage-mechanics
-        ' https://www.reddit.com/r/TheSilphRoad/comments/i2mvde/calculating_damage_done_by_an_attack_in_pogo/
-        
-        .dmgCharge = GetDmgChargeMove(cm) * .factorMult * pk.bstat.att * factor_PVP
-        .hpPerCharge = RoundDown(.dmgCharge / pkDefender.bstat.def) + 1 ' Initial , pre-buff, pre-time factor hp taken per charge move.
-        
-        .dptChargeInit = .dmgCharge / .cTurnsToCharge
-        .dptCharge = .dptChargeInit * .factorTime
-        .hpptCharge = HpPerTurnCm(cm, pkDefender.bstat.def)
-        
-        ' number of turns in battle , estimate if half of charge move damage is blocked or surplus.  For planning, not scoring.
-        .cTurnsToVictory = RoundUpTurnsQm(pkDefender.bstat.hp / (pk.qm.hpptQuick + .hpptCharge / 2), pk.qm)
-        
-    End With
-
-End Sub
     
 
 Sub DetermineMoveThreat(cm As ChargeMove, pkDefender As Pokemon)
@@ -887,409 +709,11 @@ Sub DetermineMoveThreat(cm As ChargeMove, pkDefender As Pokemon)
         
 End Sub
 
-Sub InitPokemon(ByRef pk As Pokemon, csv As String)
-    Dim pkInit As Pokemon
-    Dim iNextMove As Integer, strNextMove As String, strQuickMove As String, strChargeMove As String
-    Dim strCategory As String
-    Dim strType As String
-
-    
-    pk = pkInit ' empty
-    
-    pk.strName = ParsePokemonName(csv)
-    pk.csv = pk.strName  ' we will rebuild this to beautify and standardize
-    
-    strQuickMove = ParseMoveName(csv, 1)
-    If strQuickMove <> "" Then pk.csv = pk.csv & ", " & strQuickMove
-    
-    strChargeMove = ParseMoveName(csv, 2)
-    If strChargeMove <> "" Then pk.csv = pk.csv & ", " & strChargeMove
-    
-    iNextMove = 3
-    strNextMove = ParseMoveName(csv, iNextMove)
-    
-    While strNextMove <> ""
-        strType = TypeOfChargeMove(strNextMove)
-        If strType = "Unknown" Then
-            pk.fInvalid = True
-            pk.fInvalidChargeMove = True
-        End If
-        pk.fMultipleChargeMoves = True
-        
-        pk.csv = pk.csv & ", " & strNextMove
-        iNextMove = iNextMove + 1
-        strNextMove = ParseMoveName(csv, iNextMove)
-    Wend
-    
-    ' pk.csv is now a normalized version of csv, with consistent spacing and capitalization.
-
-    pk.strNameData = pk.strName
-
-    If InStr(pk.strName, "(shadow") > 0 Then
-        pk.strNameData = Trim(Replace(pk.strName, "(shadow)", ""))
-        pk.fShadow = True
-    End If
-    
-    Set pk.rngData = GetPokemonData(pk.strNameData)
-    
-    If pk.rngData Is Nothing Then
-        If SymbolForType(pk.strNameData) <> "?" Then
-            pk.strType1 = pk.strNameData  ' Pokemon name IS a type, like Fighting.  Just return it so people can treat types as Pokemon.
-        Else
-            pk.strType1 = "Unknown"
-        End If
-        
-        pk.strType2 = ""
-    Else
-        pk.strType1 = pk.rngData.Cells(1, pkData_Type1)
-        pk.strType2 = pk.rngData.Cells(1, pkData_Type2)
-    End If
-
-    Call InitQuickMove(pk.qm, strQuickMove, pk.strType1)
-    Call InitChargeMove(pk.cm, pk.qm, strChargeMove, pk.strType1)
-    
-    If pk.strType1 = "Unknown" Then
-        pk.fInvalid = True
-        pk.fInvalidPokemon = True
-    ElseIf pk.qm.strType = "Unknown" Then
-        pk.fInvalid = True
-        pk.fInvalidQuickMove = True
-    ElseIf pk.rngData Is Nothing Then
-        pk.fTypeMuse = True
-    ElseIf pk.qm.rngData Is Nothing Then
-        pk.fInvalid = True
-        pk.fInvalidQuickMove = True
-    ElseIf pk.cm.rngData Is Nothing Then
-        pk.fInvalid = True
-        pk.fInvalidChargeMove = True
-    End If
-    
-    strCategory = GetPkString(pk, pkData_Category)
-    If strCategory = "M" Or strCategory = "L" Then pk.fLegendaryOrMythical = True
-    
-End Sub
-
-' Qualify a Pokemon for battle.
-
-Sub QualifyPokemon(pk As Pokemon, csvIV As String, ByVal rngDataBattleLeague As Range, fTypeMuseOK As Boolean)
-    Dim cpMaxBattleLeague As Integer
-
-    If pk.fInvalid Then Exit Sub
-    
-    cpMaxBattleLeague = GetDataInteger(rngDataBattleLeague, blData_MaxCp)
-    If cpMaxBattleLeague = 0 Then
-        ' Nothing to do to qualify for Type Effeciveness Battle.
-        pk.fTypeEffectivenessBattle = True
-        pk.fQualified = True
-        Exit Sub
-    End If
-    
-    If pk.fTypeMuse Then
-        ' The pokemon is a Type Muse. How would our Pokemon do against a generic pokemon of a specific type with specific type moves?
-        ' Generally, we allow type muses in the meta but not on our team.
-        
-        pk.fQualified = fTypeMuseOK  ' Team members can't be type prototypes, but meta muses can be
-        pk.fTypeEffectivenessBattle = True
-        Exit Sub
-    End If
-    
-    ' let's use 13, 13, 13 as our default ivs
-    pk.ivs.Attack = 13: pk.ivs.Defense = 13: pk.ivs.Stamina = 13: pk.ivs.levelMax = 40
-
-    If csvIV <> "" Then
-        Dim str1 As String, str2 As String, str3 As String, str4 As String
-        
-        Call Parse4Substrings(csvIV, ",", str1, str2, str3, str4)
-        If IsNumeric(str1) Then pk.ivs.Attack = MinMaxI(CInt(str1), 1, 15)
-        If IsNumeric(str2) Then pk.ivs.Defense = MinMaxI(CInt(str2), 1, 15)
-        If IsNumeric(str3) Then pk.ivs.Stamina = MinMaxI(CInt(str3), 1, 15)
-        If IsNumeric(str4) Then pk.ivs.levelMax = MinMax(CDec(str4), 1, 41)
-        pk.ivs.csvIV = csvIV
-    End If
-    
-    
-    pk.fQualified = True
-    
-    ' Qualified unless the League has restrictions.
-    
-    Select Case GetDataString(rngDataBattleLeague, blData_Restriction)
-    
-    Case "Premier"
-        If pk.fLegendaryOrMythical Then pk.fQualified = False
-        
-    Case "Flying"
-        If pk.strType1 <> "Flying" And pk.strType2 <> "Flying" Then pk.fQualified = False
-    
-    End Select
-    
-    Call CalcPokemonStats(pk, cpMaxBattleLeague)
-
-End Sub
-
-Function StrValidatePk(pk As Pokemon) As String
-    StrValidatePk = ""
-    If pk.fInvalid Then
-        If pk.fInvalidPokemon Then
-            StrValidatePk = "Not A Pokemon"
-        ElseIf Not pk.fTypeMuse Then
-            If pk.qm.strMove = "" Then
-                StrValidatePk = "Missing Quick Move"
-            ElseIf pk.fInvalidQuickMove Then
-                StrValidatePk = "Bad Quick Move"
-            ElseIf pk.cm.strMove = "" Then
-                StrValidatePk = "Missing Charge Move"
-            ElseIf pk.fInvalidChargeMove Then
-                StrValidatePk = "Bad Charge Move"
-            End If
-        End If
-    End If
-End Function
-
-Sub InitQuickMove(qm As QuickMove, strQuickMove As String, Optional strDefaultType As String = "")
-    Dim qmInit As QuickMove
-    
-    qm = qmInit ' clear data
-    qm.strMove = strQuickMove
-    
-    If qm.strMove = "" Then
-        qm.strType = strDefaultType
-    Else
-        Set qm.rngData = GetQuickMoveData(qm.strMove)
-    
-        If qm.rngData Is Nothing Then
-            If SymbolForType(qm.strMove) <> "?" Then
-                qm.strType = qm.strMove  ' Attack name IS a type, like Fighting.  Just return it so people can use pseudo-attacks
-            Else
-                qm.strType = "Unknown"
-            End If
-        Else
-            qm.strType = qm.rngData.Cells(1, 2).value
-            qm.cTurnsToQuick = GetDataValue(qm.rngData, 5)
-        End If
-    End If
-
-End Sub
-
-Sub InitChargeMove(cm As ChargeMove, qm As QuickMove, strChargeMove As String, Optional strDefaultType As String = "")
-    Dim cmInit As ChargeMove
-    
-    cm = cmInit ' clear data
-    cm.strMove = strChargeMove
-    
-    If cm.strMove = "" Then
-        cm.strType = strDefaultType
-    Else
-        Set cm.rngData = GetChargeMoveData(cm.strMove)
-    
-        If cm.rngData Is Nothing Then
-            If SymbolForType(cm.strMove) <> "?" Then
-                cm.strType = cm.strMove  ' Attack name IS a type, like Fighting.  Just return it so people can use pseudo-attacks
-            Else
-                cm.strType = "Unknown"
-            End If
-        Else
-            cm.strType = cm.rngData.Cells(1, 2).value
-            cm.cTurnsToCharge = CTurnsToChargeMove(cm, qm)
-        End If
-    End If
-
-End Sub
-
-Sub CalcPokemonStats(pk As Pokemon, cpMax As Integer)
-    Dim valAttack As Integer, valDefense As Integer, valStamina As Integer, statMult As Single
-    
-    ' level and stats of each pokemon
-    ' Initial stats are preserved in cases where stat changing attacks may change the stats during battle.
-    
-    valAttack = CInt(pk.rngData.Cells(1, pkData_Attack)) + pk.ivs.Attack
-    valDefense = CInt(pk.rngData.Cells(1, pkData_Defense)) + pk.ivs.Defense
-    valStamina = CInt(pk.rngData.Cells(1, pkData_Stamina)) + pk.ivs.Stamina
-    
-    With pk.bstat
-    
-    For .level = pk.ivs.levelMax To 0 Step -0.5
-        .cp = CpAtLevelFromStats(.level, valAttack, valDefense, valStamina)
-        If .cp <= cpMax Then Exit For
-    Next .level
-    
-    statMult = StatMultiplier(.level)
-    
-    .attCMP = statMult * valAttack      ' attack stat for Charge Move priority.
-    .attInit = .attCMP                  ' start battling with .attInit
-    
-    .defInit = statMult * valDefense    ' start battling with .defInit
-    
-    If pk.fShadow Then                  ' alter .attInit and .defInit symetrically for Shadow Pokemon
-        .attInit = (6 / 5) * .attInit
-        .defInit = (5 / 6) * .defInit
-    End If
-    
-    .att = .attInit   ' .att starts with .attInit, but can be changed with stat changing moves.
-    .def = .defInit   ' .def starts with .defInit, but can be changed with stat changing moves.
-    
-    .hp = RoundDown(statMult * valStamina)
-    
-    End With
-
-End Sub
 
 
-Function LevelAtCpForPokemon(pk As Pokemon, cpMax As Integer, levelMax As Single)
-    Dim valAttack As Integer, valDefense As Integer, valStamina As Integer
-    
-    valAttack = pk.rngData.Cells(1, pkData_Attack) + pk.ivs.Attack
-    valDefense = pk.rngData.Cells(1, pkData_Defense) + pk.ivs.Defense
-    valStamina = pk.rngData.Cells(1, pkData_Stamina) + pk.ivs.Stamina
-    LevelAtCpForPokemon = LevelAtCpFromStats(cpMax, levelMax, valAttack, valDefense, valStamina)
-
-End Function
 
 
-Function LevelAtCpFromStats(cpMax As Integer, levelMax As Single, valAttack As Integer, valDefense As Integer, valStamina As Integer) As Single
-    Dim level As Single
-    
-    For level = levelMax To 0 Step -0.5
-        If CpAtLevelFromStats(level, valAttack, valDefense, valStamina) <= cpMax Then Exit For
-    Next level
-    
-    LevelAtCpFromStats = level
-End Function
 
-Function CpAtLevelFromStats(level As Single, valAttack As Integer, valDefense As Integer, valStamina As Integer) As Single
-' see https://gamepress.gg/pokemongo/pokemon-stats-advanced#:~:text=Calculating%20CP,*%20CP_Multiplier%5E2)%20%2F%2010
-    Dim mult As Single
-    
-    'valAttack, valDefense, valStamina are the pokemon's base stat plus the related IV of the pokemon.
-    'For a perfect pokemon, add 15 to each base stat.
-    
-    mult = StatMultiplier(level)
-    CpAtLevelFromStats = RoundDown((valAttack * Sqr(valDefense) * Sqr(valStamina) * mult * mult) / 10)
-    
-End Function
-
-
-Function CTurnsToChargeMove(cm As ChargeMove, qm As QuickMove) As Single
-
-    Dim cTurnsToCharge As Single
-    
-    If cm.rngData Is Nothing Or qm.rngData Is Nothing Then
-        CTurnsToChargeMove = 0 ' test case: charge move is valid but quick move is invalid during InitChargeMove
-    Else
-        cTurnsToCharge = GetEnergyChargeMove(cm) / GetEptQuickMove(qm)
-        
-        ' The answer must be an integer and a multiple of the duration of the quick move
-        CTurnsToChargeMove = RoundUpTurnsQm(cTurnsToCharge, qm)
-    End If
-
-End Function
-
-Function CTurnsToVictoryQm(qm As QuickMove, hpDefender As Integer, defDefender As Single) As Single
-    Dim cTurns As Single, dhpPerQuickMove As Single
-
-    dhpPerQuickMove = Max(RoundDown(qm.dptQuick * qm.cTurnsToQuick / defDefender), 1)
-    
-    cTurns = (hpDefender / dhpPerQuickMove) * qm.cTurnsToQuick
-    CTurnsToVictoryQm = Application.WorksheetFunction.RoundUp(cTurns / qm.cTurnsToQuick, 0) * qm.cTurnsToQuick
-    
-End Function
-
-Function HpPerTurnQm(qm As QuickMove, defDefender As Single) As Single
-
-    Dim cTurns As Single, dhpPerQuickMove As Single
-    
-    ' https://www.reddit.com/r/TheSilphRoad/comments/i2mvde/calculating_damage_done_by_an_attack_in_pogo/
-
-    dhpPerQuickMove = RoundDown(qm.dptQuick * qm.cTurnsToQuick / defDefender) + 1
-    
-    HpPerTurnQm = dhpPerQuickMove / qm.cTurnsToQuick
-
-End Function
-
-Function HpPerTurnCm(cm As ChargeMove, defDefender As Single) As Single
-    Dim dhpPerChargeMove
-    
-    ' https://www.reddit.com/r/TheSilphRoad/comments/i2mvde/calculating_damage_done_by_an_attack_in_pogo/
-
-    dhpPerChargeMove = RoundDown(cm.dptCharge * cm.cTurnsToCharge / defDefender) + 1
-    
-    HpPerTurnCm = dhpPerChargeMove / cm.cTurnsToCharge
-
-End Function
-
-Function RoundUpTurnsQm(cTurns As Single, qm As QuickMove) As Single
-    
-    RoundUpTurnsQm = Application.WorksheetFunction.RoundUp(cTurns / qm.cTurnsToQuick, 0) * qm.cTurnsToQuick
-    
-End Function
-
-Function TimeFactor(cm As ChargeMove, cTurnsMaxBattle As Single) As Single
-    Dim cTurnsCharge As Single
-    
-    TimeFactor = 1  ' Default answer indicating no time factor impact, or no battle details available.
-    
-    If cTurnsMaxBattle > 0 Then
-        ' the longer a charge attack takes to fire, the less valuable it is.
-        ' consider valuing an attack at half value if it takes a whole expected battle to fire.
-        ' notice that quicker attacks are still discounted, but less so exponentially.
-        
-        'if cTurnsMaxBattle is infinite, TimeFactor is just 1.
-        'The default cTurnsMaxBattle is 30 turns, but BattleScore provides a custom estimate.
-        
-        TimeFactor = (1 / (2 ^ (cm.cTurnsToCharge * 1.6 / cTurnsMaxBattle)))
-        
-    End If
-    
-End Function
-
-' This code not used, as shield factor is not implemented.
-
-Function ShieldFactor(cm As ChargeMove, cTurnsInBattle As Single, cShields As Single) As Single
-    Dim cTurnsCharge As Single
-    
-    ShieldFactor = 1
-    
-    If cTurnsInBattle > 0 Then
-
-        cTurnsCharge = cm.cTurnsToCharge
-        
-        If cShields > 0 Then
-            Dim cChargeMovesInBattle As Single, factorShield As Single
-    
-            cChargeMovesInBattle = cTurnsInBattle / cTurnsCharge
-            
-            If cShields >= cChargeMovesInBattle Then
-                factorShield = 0
-            Else
-                factorShield = (cChargeMovesInBattle - cShields) / cChargeMovesInBattle
-            End If
-            
-            ShieldFactor = factorShield
-        End If
-    End If
-    
-End Function
-
-Function BuffFactor(cm As ChargeMove, cmDefender As ChargeMove, ByVal cTurnsMaxBattle As Single) As Single
-    Dim cTurnsInBattle As Single
-    Dim dptAttackerQuick As Single, dptAttackerCharge As Single, defAttacker As Single
-    Dim dptDefenderQuick As Single, dptDefenderCharge As Single, defDefender As Single
-    Dim breakPoint As Integer
-    
-    BuffFactor = 1 ' Default answer indicating no time factor impact, or no battle details available.
-    
-    If cTurnsMaxBattle > 0 And IsStatAlteringChargeMove(cm) Then
-        dptAttackerQuick = 1: dptAttackerCharge = 1: defAttacker = 1
-        dptDefenderQuick = 1: dptDefenderCharge = 1: defDefender = 1
-        
-        cTurnsInBattle = Min(cm.cTurnsToVictory, cmDefender.cTurnsToVictory)
-
-        Call AdjustForBuff(cm, cm, cTurnsMaxBattle, cTurnsInBattle, _
-            dptAttackerQuick, dptAttackerCharge, defAttacker, dptDefenderQuick, dptDefenderCharge, defDefender)
-                        
-        BuffFactor = ((dptAttackerQuick + dptAttackerCharge) * defAttacker) / ((dptDefenderQuick + dptDefenderCharge) * defDefender)
-    End If
-
-End Function
 
 
 
