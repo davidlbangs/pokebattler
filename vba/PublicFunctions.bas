@@ -63,19 +63,18 @@ Sub HideDisplayedComments()
 End Sub
 
 Function ScoreFromComment(cellUpd As Range, Optional fMetaScores As Boolean = False) As Single
-Dim strText As String, valScore As Single
+Dim strText As String
 
 Dim iColor As Integer
-Dim rng As Range, iLineFeed As Integer, iColon As Integer
+Dim rng As Range
 
-    On Error GoTo NoComment
+    If cellUpd.Comment Is Nothing Then GoTo NoComment
     
-    strText = cellUpd.Comment.Text
-    iLineFeed = InStr(strText, Chr(10))
-    If iLineFeed > 0 Then strText = left(strText, iLineFeed - 1)
+    strText = ParseSubstringBetween(cellUpd.Comment.Text, "Battle Score: ", Chr(10))
     
-    iColon = InStr(strText, ":")
-    If iColon > 0 Then strText = Mid(strText, iColon + 1)
+    If Not (IsNumeric(strText)) Then
+        GoTo NoComment
+    End If
     
     If fMetaScores Then
         ScoreFromComment = 1000 - CDec(strText)
@@ -96,9 +95,8 @@ Dim strText As String, valScore As Single
 
 Dim iColor As Integer
 Dim rng As Range, iLineFeed
-
-    On Error GoTo NoComment
     
+    If cellUpd.Comment Is Nothing Then GoTo NoComment
     
     strText = cellUpd.Comment.Text
     IsTextInComment = InStr(strText, strSearch) <> 0
@@ -109,8 +107,6 @@ NoComment:
     IsTextInComment = False
 
 End Function
-
-
 
 
 Function CountBattles(rng As Range) As Integer
@@ -200,7 +196,7 @@ End Function
 
 Function CountScoresBelow(rng As Range, valScoreCompare As Single, Optional fMetaScores As Boolean = False) As Integer
     Dim iRow As Integer, iCol As Integer
-    Dim count As Integer
+    Dim count As Integer, score As Integer
     
     count = 0
     
@@ -213,7 +209,9 @@ Function CountScoresBelow(rng As Range, valScoreCompare As Single, Optional fMet
         For iCol = 1 To .Columns.count
             If .Columns.count > 1 Then If .Columns(iCol).EntireColumn.Hidden Then GoTo NextCol
             
-            If ScoreFromComment(.Cells(iRow, iCol), fMetaScores) < valScoreCompare Then count = count + 1
+            score = ScoreFromComment(.Cells(iRow, iCol), fMetaScores)
+            
+            If score >= 0 And score < valScoreCompare Then count = count + 1
 NextCol:
         Next iCol
 
@@ -386,11 +384,7 @@ Dim pk As Pokemon
     ValidateCsv = StrValidatePk(pk)
     
     If fExplicit Then
-        If pk.fTypeMuse Then
-            ValidateCsv = "Type Muse"
-        Else
-            ValidateCsv = "Valid CSV"
-        End If
+        ValidateCsv = "Valid CSV"
     End If
     
 End Function

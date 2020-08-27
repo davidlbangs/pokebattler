@@ -629,7 +629,7 @@ Sub DisplayChargeMoveAlerts(cell As Range, ByRef cellForSizing As Range, ByRef i
     
     If cellForSizing Is Nothing Then Set cellForSizing = cell  ' size all icons consistent with the first one.
     
-    If bdm.fChargeMoveAlerts_Shields And pkMeta.cmBest.threat.threatLevel > 4 Then
+    If bdm.fChargeMoveAlerts_Shields And pkMeta.cmBest.threat.threatLevel > 3 Then
         Set sFound = FindPokemonShape("Shield")
         If Not (sFound Is Nothing) Then
             sFound.Copy
@@ -834,10 +834,7 @@ Sub AddBattleScoreComment(cell As Range, valScore As Single, pkTeam As Pokemon, 
     
     ' If this is changed, must update BattleScoreFromComment
     
-    fTypeEffectivenessBattle = pkTeam.fTypeEffectivenessBattle Or pkMeta.fTypeEffectivenessBattle
-    
     'Text Block 1:  Battle Results
-    
     strText = "Battle Score: " & CStr(valScore) & Chr(10)
     
     If valScore < 400 Then
